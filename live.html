@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live board · OKV School</title>
+<style>
+:root { --ink:#1b2430; --muted:#5b6675; --line:#d9dee6; --brand:#2456b8; --bad:#b42318; --bg:#f5f7fa; --card:#fff; --paper:#ffffff; --warn:#fff4cc; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink:#e8edf4; --muted:#9aa6b6; --line:#2e3744; --brand:#7aa2ff; --bad:#ff8a80; --bg:#12161c; --card:#1a2029; --paper:#222a36; --warn:#3a3120; } }
+:root[data-theme="dark"] { --ink:#e8edf4; --muted:#9aa6b6; --line:#2e3744; --brand:#7aa2ff; --bad:#ff8a80; --bg:#12161c; --card:#1a2029; --paper:#222a36; --warn:#3a3120; }
+* { box-sizing:border-box; }
+html, body { height:100%; margin:0; }
+body { background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; display:flex; flex-direction:column; }
+header { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; padding:8px 12px; border-bottom:1px solid var(--line); background:var(--card); }
+header h1 { font-size:16px; margin:0; }
+.bar { display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:8px 12px; background:var(--card); border-bottom:1px solid var(--line); }
+button { padding:7px 12px; font-size:14px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); cursor:pointer; }
+button.on { background:var(--brand); color:#fff; border-color:var(--brand); }
+button.primary { background:var(--brand); color:#fff; border-color:var(--brand); }
+button:disabled { opacity:.45; cursor:not-allowed; }
+input[type=color] { width:36px; height:30px; border:1px solid var(--line); border-radius:6px; background:none; padding:0; }
+input[type=range] { width:110px; }
+.sep { width:1px; align-self:stretch; background:var(--line); margin:0 4px; }
+.status { font-size:13px; color:var(--muted); margin-left:auto; }
+.status b { color:var(--ink); }
+.pages { display:flex; gap:6px; align-items:center; font-size:14px; }
+#hand { display:none; align-items:center; gap:8px; padding:8px 12px; background:var(--warn); border-bottom:1px solid var(--line); font-size:14px; }
+#hand.show { display:flex; }
+#stage { flex:1; position:relative; min-height:0; padding:10px; }
+canvas { position:absolute; inset:10px; width:calc(100% - 20px); height:calc(100% - 20px); background:var(--paper); border:1px solid var(--line); border-radius:8px; touch-action:none; }
+canvas.locked { cursor:not-allowed; }
+#note { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); color:var(--muted); text-align:center; padding:16px; background:var(--card); border:1px solid var(--line); border-radius:10px; max-width:320px; }
+.msg { font-size:13px; color:var(--bad); padding:0 12px 6px; min-height:0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Live board</h1>
+  <button id="back">Back</button>
+</header>
+<div id="hand">
+  <span>The student is asking for the pen.</span>
+  <button class="primary" id="handGive">Give pen</button>
+  <button id="handDismiss">Dismiss</button>
+</div>
+<div class="bar" id="tools">
+  <button data-tool="pen" class="on">Pen</button>
+  <button data-tool="erase">Eraser</button>
+  <button data-tool="line">Line</button>
+  <button data-tool="rect">Rectangle</button>
+  <button data-tool="ellipse">Ellipse</button>
+  <button data-tool="text">Text</button>
+  <input type="color" id="color" value="#1b2430" title="Colour">
+  <input type="range" id="width" min="1" max="12" value="3" title="Line width">
+  <span class="sep"></span>
+  <button id="undo" title="Remove your last item">Undo</button>
+  <button id="png" title="Save this page as a picture">Save page (PNG)</button>
+  <span class="sep"></span>
+  <span class="pages">
+    <button id="prev" title="Previous page">◀</button>
+    <span id="pageLbl">Page 1</span>
+    <button id="next" title="Next page">▶</button>
+    <button id="addPage" title="Add a blank page">+ Page</button>
+  </span>
+  <button id="clear" hidden>Clear this page</button>
+  <button id="ask" hidden>✋ Ask for pen</button>
+  <span class="status" id="status">Connecting…</span>
+  <span id="teacherCtl" hidden>
+    <button id="pen">Give pen to student</button>
+    <button id="start" class="primary" hidden>Start board</button>
+    <button id="end" hidden>End session</button>
+  </span>
+</div>
+<div class="msg" id="msg"></div>
+<div id="stage">
+  <canvas id="cv"></canvas>
+  <div id="note" hidden></div>
+</div>
+<script src="common.js"></script>
+<script>
+const me = Session.require();
+const params = new URLSearchParams(location.search);
+const studentId = params.get('student');
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+const isTeacher = !!me && (me.role === 'teacher' || me.role === 'admin');
+const MAX_PAGES = 50;
+let live = null, objs = [], seen = 0, queue = [], mine = new Set(), drawing = null, tool = 'pen', closed = false;
+let page = 1, pageCount = 1, erasing = false, asked = false, handTimer = null;
+const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+let W = 1, H = 1;
+
+/* Coordinates are fractions of the board (0..1), so both screens show the same picture at any size.
+   Widths and font sizes are in units of 1000 = full board width. */
+function resize() {
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  W = r.width; H = r.height; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); render();
+}
+const px = (n) => n * W, py = (n) => n * H, unit = (u) => u * W / 1000;
+function fx(e) { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / W, (e.clientY - r.top) / H]; }
+
+/* Every board item has an id, a page (pg) and an author (_a). Erase and undo use the id. */
+function applyOp(op, author) {
+  op._a = author || me.id;
+  if (op.t === 'clear') { objs = objs.filter(o => (o.pg || 1) !== (op.pg || 1)); return; }
+  if (op.t === 'del') { objs = objs.filter(o => o.id !== op.target); return; }
+  if (op.t === 'page') { page = op.n; pageCount = Math.max(pageCount, op.n); paintPages(); return; }
+  if (op.t === 'hand') return;
+  pageCount = Math.max(pageCount, op.pg || 1);
+  objs.push(op);
+}
+function drawOp(o) {
+  ctx.save(); ctx.strokeStyle = o.c; ctx.fillStyle = o.c; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.lineWidth = unit(o.w || 3);
+  if (o.t === 'path') {
+    ctx.beginPath(); o.pts.forEach((p, i) => i ? ctx.lineTo(px(p[0]), py(p[1])) : ctx.moveTo(px(p[0]), py(p[1]))); ctx.stroke();
+  } else if (o.t === 'line') {
+    ctx.beginPath(); ctx.moveTo(px(o.a[0]), py(o.a[1])); ctx.lineTo(px(o.b[0]), py(o.b[1])); ctx.stroke();
+  } else if (o.t === 'rect') {
+    ctx.strokeRect(px(o.a[0]), py(o.a[1]), px(o.b[0] - o.a[0]), py(o.b[1] - o.a[1]));
+  } else if (o.t === 'ellipse') {
+    const cx = px((o.a[0] + o.b[0]) / 2), cy = py((o.a[1] + o.b[1]) / 2);
+    ctx.beginPath(); ctx.ellipse(cx, cy, Math.abs(px(o.b[0] - o.a[0])) / 2, Math.abs(py(o.b[1] - o.a[1])) / 2, 0, 0, Math.PI * 2); ctx.stroke();
+  } else if (o.t === 'text') {
+    ctx.font = `${unit(o.sz || 28)}px system-ui, sans-serif`; ctx.textBaseline = 'top';
+    o.s.split('\n').forEach((line, i) => ctx.fillText(line, px(o.p[0]), py(o.p[1]) + i * unit(o.sz || 28) * 1.25));
+  }
+  ctx.restore();
+}
+function render() {
+  ctx.clearRect(0, 0, W, H);
+  objs.forEach(o => { if ((o.pg || 1) === page) drawOp(o); });
+  if (drawing) drawOp(drawing);
+  paintPages();
+}
+
+/* ----- hit testing for the eraser, in pixels ----- */
+function distSeg(x, y, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy;
+  let t = L ? ((x - ax) * dx + (y - ay) * dy) / L : 0; t = Math.max(0, Math.min(1, t));
+  return Math.hypot(x - (ax + t * dx), y - (ay + t * dy));
+}
+function hitObj(o, x, y) {
+  const tol = Math.max(8, unit(o.w || 3) / 2 + 6);
+  if (o.t === 'path') {
+    if (o.pts.length === 1) return Math.hypot(x - px(o.pts[0][0]), y - py(o.pts[0][1])) < tol;
+    for (let i = 1; i < o.pts.length; i++) if (distSeg(x, y, px(o.pts[i - 1][0]), py(o.pts[i - 1][1]), px(o.pts[i][0]), py(o.pts[i][1])) < tol) return true;
+    return false;
+  }
+  if (o.t === 'line') return distSeg(x, y, px(o.a[0]), py(o.a[1]), px(o.b[0]), py(o.b[1])) < tol;
+  if (o.t === 'rect') {
+    const x1 = px(o.a[0]), y1 = py(o.a[1]), x2 = px(o.b[0]), y2 = py(o.b[1]);
+    return [[x1, y1, x2, y1], [x2, y1, x2, y2], [x2, y2, x1, y2], [x1, y2, x1, y1]].some(s => distSeg(x, y, ...s) < tol);
+  }
+  if (o.t === 'ellipse') {
+    const cx = px((o.a[0] + o.b[0]) / 2), cy = py((o.a[1] + o.b[1]) / 2), rx = Math.abs(px(o.b[0] - o.a[0])) / 2, ry = Math.abs(py(o.b[1] - o.a[1])) / 2;
+    for (let i = 0; i < 64; i++) { const t = i / 64 * Math.PI * 2; if (Math.hypot(x - (cx + rx * Math.cos(t)), y - (cy + ry * Math.sin(t))) < tol) return true; }
+    return false;
+  }
+  if (o.t === 'text') {
+    const sz = unit(o.sz || 28), lines = o.s.split('\n');
+    const w = Math.max(...lines.map(l => l.length)) * sz * 0.6, h = lines.length * sz * 1.25;
+    const x0 = px(o.p[0]), y0 = py(o.p[1]);
+    return x >= x0 - tol && x <= x0 + w + tol && y >= y0 - tol && y <= y0 + h + tol;
+  }
+  return false;
+}
+
+/* ----- drawing ----- */
+function canPaint() { return !closed && !!live && (isTeacher || live.penHolder === me.id); }
+function canTarget(o) { return isTeacher || o._a === me.id; }
+function setTool(t) { tool = t; document.querySelectorAll('#tools [data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t)); }
+document.querySelectorAll('#tools [data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
+function style() { return { c: $('color').value, w: Number($('width').value) * 1000 / Math.max(W, 1) }; }
+/* Apply locally at once, and queue a copy for the server (without the local-only _a field). */
+function commit(op) {
+  op.pg = page;
+  const wire = Object.assign({}, op);
+  applyOp(op, me.id); mine.add(op.id); queue.push(wire); render();
+}
+function eraseAt(x, y) {
+  const xp = px(x), yp = py(y);
+  const hits = objs.filter(o => (o.pg || 1) === page && canTarget(o) && hitObj(o, xp, yp));
+  if (hits.length) commit({ t: 'del', id: uid(), target: hits[hits.length - 1].id });
+}
+
+cv.addEventListener('pointerdown', (e) => {
+  if (!canPaint()) return;
+  const [x, y] = fx(e);
+  if (tool === 'erase') { cv.setPointerCapture(e.pointerId); erasing = true; eraseAt(x, y); return; }
+  if (tool === 'text') {
+    const s = prompt('Text to place on the board:');
+    if (s && s.trim()) commit({ t: 'text', id: uid(), c: $('color').value, w: 3, sz: 28, p: [x, y], s: s.trim().slice(0, 500) });
+    return;
+  }
+  cv.setPointerCapture(e.pointerId);
+  const st = style();
+  drawing = tool === 'pen' ? { t: 'path', id: uid(), c: st.c, w: st.w, pts: [[x, y]] }
+    : { t: tool, id: uid(), c: st.c, w: st.w, a: [x, y], b: [x, y] };
+  render();
+});
+cv.addEventListener('pointermove', (e) => {
+  const [x, y] = fx(e);
+  if (erasing) { eraseAt(x, y); return; }
+  if (!drawing) return;
+  if (drawing.t === 'path') {
+    const last = drawing.pts[drawing.pts.length - 1];
+    if (Math.abs(last[0] - x) + Math.abs(last[1] - y) > 0.002) drawing.pts.push([x, y]);
+  } else drawing.b = [x, y];
+  render();
+});
+function finish() {
+  erasing = false;
+  if (!drawing) return;
+  const d = drawing; drawing = null;
+  if (d.t === 'path' ? d.pts.length > 1 : (Math.abs(d.a[0] - d.b[0]) + Math.abs(d.a[1] - d.b[1]) > 0.003)) commit(d);
+  render();
+}
+cv.addEventListener('pointerup', finish);
+cv.addEventListener('pointercancel', () => { erasing = false; drawing = null; render(); });
+
+$('undo').onclick = () => {
+  if (!canPaint()) return;
+  const own = objs.filter(o => (o.pg || 1) === page && o._a === me.id);
+  const last = own[own.length - 1];
+  if (last) commit({ t: 'del', id: uid(), target: last.id });
+};
+$('clear').onclick = () => { if (!canPaint() || !isTeacher) return; if (confirm('Clear this page for everyone?')) commit({ t: 'clear', id: uid() }); };
+
+/* ----- pages (the teacher moves the class; the student follows) ----- */
+function paintPages() {
+  $('pageLbl').textContent = isTeacher ? `Page ${page} of ${pageCount}` : `Page ${page}`;
+  $('prev').hidden = $('next').hidden = $('addPage').hidden = !isTeacher;
+  $('prev').disabled = page <= 1;
+  $('next').disabled = page >= pageCount;
+  $('addPage').disabled = pageCount >= MAX_PAGES;
+}
+function goPage(n) { if (!canTeacherPages() || n < 1 || n > MAX_PAGES) return; commit({ t: 'page', id: uid(), n }); }
+function canTeacherPages() { return isTeacher && !closed && !!live; }
+$('prev').onclick = () => goPage(page - 1);
+$('next').onclick = () => goPage(page + 1);
+$('addPage').onclick = () => { if (pageCount < MAX_PAGES) goPage(pageCount + 1); };
+
+/* ----- export ----- */
+$('png').onclick = () => {
+  const off = document.createElement('canvas'); off.width = cv.width; off.height = cv.height;
+  const o = off.getContext('2d');
+  o.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--paper').trim() || '#ffffff';
+  o.fillRect(0, 0, off.width, off.height); o.drawImage(cv, 0, 0);
+  off.toBlob(blob => {
+    if (!blob) return Ui.msg($('msg'), 'Could not make the picture.', true);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `board-page-${page}.png`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }, 'image/png');
+};
+
+/* ----- ask for the pen / teacher banner ----- */
+function showHand() {
+  $('hand').classList.add('show');
+  clearTimeout(handTimer); handTimer = setTimeout(() => $('hand').classList.remove('show'), 20000);
+}
+function hideHand() { $('hand').classList.remove('show'); clearTimeout(handTimer); }
+$('handDismiss').onclick = hideHand;
+$('handGive').onclick = async () => { hideHand(); if (live && live.penHolder !== live.studentId) $('pen').click(); };
+$('ask').onclick = () => {
+  if (!live || asked) return;
+  commit({ t: 'hand', id: uid() });
+  asked = true; updateStatus();
+  setTimeout(() => { asked = false; updateStatus(); }, 15000);
+};
+
+/* ----- network ----- */
+async function sendQueue() {
+  if (!live || !queue.length || closed) return;
+  const ops = queue.splice(0, 100);
+  try {
+    const r = await Api.call('pushOps', { liveId: live.id, ops });
+    if (r.rejected) Ui.msg($('msg'), 'Some items were not allowed and were not saved.', true);
+  } catch (e) {
+    if (/pen/i.test(e.message)) { Ui.msg($('msg'), 'You no longer have the pen. Your last items were not saved.', true); queue = []; }
+    else { queue = ops.concat(queue); Ui.msg($('msg'), e.message, true); }
+  }
+}
+async function poll() {
+  if (!live) return;
+  try {
+    const r = await Api.call('pollOps', { liveId: live.id, since: seen });
+    r.ops.forEach(o => {
+      seen = Math.max(seen, o.seq);
+      if (o.op.id && mine.has(o.op.id)) return;
+      if (o.op.t === 'hand') { if (isTeacher && o.author !== me.id) showHand(); return; }
+      applyOp(o.op, o.author);
+    });
+    if (r.ops.length) render();
+    live.penHolder = r.penHolder;
+    if (live.penHolder === live.studentId) hideHand();
+    if (r.status !== 'open') closed = true;
+    updateStatus();
+  } catch (e) { $('status').textContent = 'Offline. Reconnecting…'; }
+}
+function updateStatus() {
+  if (!live) return;
+  if (closed) { $('status').innerHTML = '<b>Session ended.</b>'; setCanPaint(); return; }
+  const who = live.penHolder === live.studentId ? 'Student' : 'Teacher';
+  $('status').innerHTML = `Pen: <b>${who}</b> · ${canPaint() ? 'you can draw' : 'view only'}`;
+  setCanPaint();
+  if (isTeacher) { $('pen').textContent = live.penHolder === live.studentId ? 'Take pen back' : 'Give pen to student'; $('end').hidden = false; }
+  if (!isTeacher) { $('ask').hidden = false; $('ask').disabled = canPaint() || asked; $('ask').textContent = asked ? 'Asked ✓' : '✋ Ask for pen'; }
+}
+function setCanPaint() {
+  cv.classList.toggle('locked', !canPaint());
+  $('clear').hidden = !isTeacher; $('undo').disabled = !canPaint();
+  paintPages();
+}
+
+$('pen').onclick = async () => {
+  if (!live) return;
+  const toStudent = live.penHolder !== live.studentId;
+  try { const r = await Api.call('handPen', { liveId: live.id, toStudent }); live.penHolder = r.penHolder; if (toStudent) hideHand(); updateStatus(); Ui.msg($('msg'), ''); }
+  catch (e) { Ui.msg($('msg'), e.message, true); }
+};
+$('end').onclick = async () => {
+  if (!confirm('End this session? The student will no longer be able to draw.')) return;
+  try { await Api.call('endLive', { liveId: live.id }); closed = true; updateStatus(); } catch (e) { Ui.msg($('msg'), e.message, true); }
+};
+$('start').onclick = () => startFor(studentId);
+$('back').onclick = () => { location.href = isTeacher ? 'teacher.html' : 'student.html'; };
+
+async function attach(found) {
+  live = found; closed = false; seen = 0; objs = []; mine = new Set(); page = 1; pageCount = 1;
+  $('note').hidden = true; $('start').hidden = true;
+  $('teacherCtl').hidden = !isTeacher; resize();
+  // rebuild from the start of the session so a page reload shows the whole board
+  await poll(); setInterval(sendQueue, 400); setInterval(poll, 1200);
+  updateStatus();
+}
+async function startFor(sid) {
+  try { const r = await Api.call('startLive', { studentId: sid }); await attach({ id: r.liveId, studentId: sid, penHolder: me.id }); }
+  catch (e) { Ui.msg($('msg'), e.message, true); }
+}
+async function init() {
+  if (!me) return;
+  $('teacherCtl').hidden = !isTeacher; setCanPaint();
+  if (isTeacher && !studentId) { $('status').textContent = 'Open a student from the Students page to start a board.'; $('note').textContent = 'Choose a student first.'; $('note').hidden = false; return; }
+  try {
+    const r = await Api.call('openLive', isTeacher ? { studentId } : {});
+    if (r.live) return attach(r.live);
+    if (isTeacher) { $('note').innerHTML = 'No board is open for this student.'; $('note').hidden = false; $('start').hidden = false; $('status').textContent = ''; return; }
+    $('note').textContent = 'Your teacher has not started a board yet. This page will update when they do.'; $('note').hidden = false;
+    setTimeout(init, 3000);
+  } catch (e) { Ui.msg($('msg'), e.message, true); }
+}
+window.addEventListener('resize', resize);
+Ui.signOutButton();
+resize();
+init();
+</script>
+</body>
+</html>

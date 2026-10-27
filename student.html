@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My school · OKV School</title>
+<style>
+:root { --ink:#1b2430; --muted:#5b6675; --line:#d9dee6; --brand:#2456b8; --bad:#b42318; --bg:#f5f7fa; --card:#fff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink:#e8edf4; --muted:#9aa6b6; --line:#2e3744; --brand:#7aa2ff; --bad:#ff8a80; --bg:#12161c; --card:#1a2029; } }
+:root[data-theme="dark"] { --ink:#e8edf4; --muted:#9aa6b6; --line:#2e3744; --brand:#7aa2ff; --bad:#ff8a80; --bg:#12161c; --card:#1a2029; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+header { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--card); }
+header h1 { font-size:18px; margin:0; }
+header nav a { color:var(--brand); margin-right:12px; font-size:14px; }
+main { max-width:900px; margin:0 auto; padding:16px; display:grid; gap:16px; }
+section.card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; min-width:0; }
+h2 { font-size:16px; margin:0 0 12px; }
+button, .btn { padding:8px 12px; font-size:14px; border:0; border-radius:8px; background:var(--brand); color:#fff; cursor:pointer; text-decoration:none; display:inline-block; }
+button.ghost { background:transparent; color:var(--brand); border:1px solid var(--line); }
+table { width:100%; border-collapse:collapse; font-size:14px; }
+th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); }
+.scroll { overflow-x:auto; }
+.muted { color:var(--muted); font-size:13px; }
+.msg { min-height:20px; font-size:14px; color:var(--bad); }
+.ann { border-top:1px solid var(--line); padding:10px 0; }
+.stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; }
+.stat { border:1px solid var(--line); border-radius:8px; padding:10px; }
+.stat b { font-size:20px; display:block; }
+</style>
+</head>
+<body>
+<header>
+  <div><h1 id="title">My school</h1><div class="muted" id="cls"></div></div>
+  <nav><a href="take.html">My tests</a><a href="live.html">Live board</a></nav>
+  <button id="signout" class="ghost">Sign out</button>
+</header>
+<main>
+  <section class="card">
+    <h2>My subjects</h2>
+    <div class="scroll"><table><thead><tr><th>Subject</th><th>Teacher</th></tr></thead><tbody id="subjRows"></tbody></table></div>
+    <div class="msg" id="subjMsg"></div>
+  </section>
+
+  <section class="card">
+    <h2>Announcements</h2>
+    <div id="annList"><p class="muted">Loading…</p></div>
+    <div class="msg" id="annMsg"></div>
+  </section>
+
+  <section class="card">
+    <h2>My attendance</h2>
+    <div class="stats" id="attStats"></div>
+    <div class="scroll" style="margin-top:10px"><table><thead><tr><th>Date</th><th>Status</th></tr></thead><tbody id="attRows"></tbody></table></div>
+    <div class="msg" id="attMsg"></div>
+  </section>
+
+  <section class="card">
+    <h2>My marks</h2>
+    <div class="scroll"><table><thead><tr><th>Subject</th><th>Assessment</th><th>Term</th><th>Score</th><th>Remark</th></tr></thead><tbody id="markRows"></tbody></table></div>
+    <div class="msg" id="markMsg"></div>
+  </section>
+
+  <section class="card">
+    <h2>Tests</h2>
+    <p class="muted">Take your class tests here. Each test can be taken once.</p>
+    <a class="btn" href="take.html">Open my tests</a>
+  </section>
+</main>
+<script src="common.js"></script>
+<script>
+const me = Session.require('student');
+Ui.signOutButton();
+const $ = id => document.getElementById(id);
+const esc = Ui.esc;
+$('title').textContent = 'Welcome, ' + me.name;
+
+(async () => {
+  try {
+    const profile = await Api.call('me');
+    $('cls').textContent = profile.user.className ? 'Class: ' + profile.user.className : 'You are not in a class yet. Ask the school office.';
+  } catch (e) { Ui.msg($('subjMsg'), e.message); }
+
+  try {
+    const { subjects } = await Api.call('listSubjects');
+    $('subjRows').innerHTML = subjects.length ? '' : '<tr><td colspan="2" class="muted">No subjects yet.</td></tr>';
+    subjects.forEach(s => { $('subjRows').insertAdjacentHTML('beforeend', `<tr><td>${esc(s.name)}</td><td>${esc(s.teacherName || 'Not assigned')}</td></tr>`); });
+  } catch (e) { Ui.msg($('subjMsg'), e.message); }
+
+  try {
+    const { announcements } = await Api.call('listAnnouncements');
+    $('annList').innerHTML = announcements.length ? '' : '<p class="muted">No announcements yet.</p>';
+    announcements.forEach(a => $('annList').insertAdjacentHTML('beforeend',
+      `<div class="ann"><div>${esc(a.text)}</div><div class="muted">${new Date(a.createdAt).toLocaleString()} · ${esc(a.authorName)}</div></div>`));
+  } catch (e) { Ui.msg($('annMsg'), e.message); }
+
+  try {
+    const { attendance } = await Api.call('listAttendance');
+    const count = s => attendance.filter(a => a.status === s).length;
+    $('attStats').innerHTML = [['Present', count('present')], ['Late', count('late')], ['Absent', count('absent')]]
+      .map(([k, v]) => `<div class="stat"><span class="muted">${k}</span><b>${v}</b></div>`).join('');
+    const rows = attendance.slice().sort((a, b) => b.day - a.day);
+    $('attRows').innerHTML = rows.length ? '' : '<tr><td colspan="2" class="muted">No attendance recorded yet.</td></tr>';
+    rows.forEach(a => {
+      const s = String(a.day);
+      $('attRows').insertAdjacentHTML('beforeend', `<tr><td>${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}</td><td>${esc(a.status)}</td></tr>`);
+    });
+  } catch (e) { Ui.msg($('attMsg'), e.message); }
+
+  try {
+    const { marks } = await Api.call('listMarks');
+    $('markRows').innerHTML = marks.length ? '' : '<tr><td colspan="5" class="muted">No marks yet.</td></tr>';
+    marks.forEach(m => $('markRows').insertAdjacentHTML('beforeend',
+      `<tr><td>${esc(m.subject)}</td><td>${esc(m.assessment)}</td><td>${esc(m.term)}</td>
+       <td>${m.score} / ${m.max} <span class="muted">(${Math.round(m.score / m.max * 100)}%)</span></td><td>${esc(m.remark)}</td></tr>`));
+  } catch (e) { Ui.msg($('markMsg'), e.message); }
+})();
+</script>
+</body>
+</html>

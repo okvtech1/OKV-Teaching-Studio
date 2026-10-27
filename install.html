@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#2456b8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="OKV School">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Install OKV School</title>
+<style>
+:root { --ink:#1b2430; --muted:#5b6675; --line:#d9dee6; --brand:#2456b8; --bg:#f5f7fa; --card:#fff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink:#e8edf4; --muted:#9aa6b6; --line:#2e3744; --brand:#7aa2ff; --bg:#12161c; --card:#1a2029; } }
+:root[data-theme="dark"] { --ink:#e8edf4; --muted:#9aa6b6; --line:#2e3744; --brand:#7aa2ff; --bg:#12161c; --card:#1a2029; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+main { max-width:520px; margin:0 auto; padding:24px 16px; }
+.hero { text-align:center; margin-bottom:18px; }
+.hero img { width:96px; height:96px; border-radius:20px; }
+h1 { font-size:22px; margin:10px 0 6px; }
+p.sub { color:var(--muted); margin:0; font-size:15px; }
+section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-top:14px; }
+h2 { font-size:16px; margin:0 0 8px; }
+ol { margin:0; padding-left:20px; line-height:1.6; font-size:15px; }
+button, .btn { display:block; width:100%; padding:13px; font-size:16px; border:0; border-radius:10px; background:var(--brand); color:#fff; cursor:pointer; text-align:center; text-decoration:none; margin-top:10px; }
+button.ghost, .btn.ghost { background:transparent; color:var(--brand); border:1px solid var(--line); }
+button:disabled { opacity:.5; }
+.done { font-weight:600; color:var(--brand); font-size:15px; min-height:22px; margin-top:10px; text-align:center; }
+.muted { color:var(--muted); font-size:13px; }
+details { margin-top:8px; font-size:14px; }
+summary { cursor:pointer; color:var(--brand); }
+</style>
+</head>
+<body>
+<main>
+  <div class="hero">
+    <img src="icon-192.png" alt="OKV School">
+    <h1>Install OKV School</h1>
+    <p class="sub" id="intro">Your school has invited you to the OKV School app.</p>
+  </div>
+
+  <section>
+    <h2>Step 1 · Install the app</h2>
+    <button id="install" hidden>Install app</button>
+    <ol id="steps">
+      <li><b>Android (Chrome):</b> tap the menu ⋮ and choose <b>Install app</b> or <b>Add to Home screen</b>.</li>
+      <li><b>iPhone or iPad (Safari):</b> tap the Share button, then <b>Add to Home Screen</b>.</li>
+      <li><b>Computer (Chrome or Edge):</b> click the install icon in the address bar.</li>
+    </ol>
+    <div class="done" id="status"></div>
+  </section>
+
+  <section>
+    <h2>Step 2 · Sign in</h2>
+    <p class="muted" style="margin:0 0 6px">Once it is installed, the sign-in page opens. Use the email and password you were given.</p>
+    <a class="btn" href="index.html" id="go">I have installed it · Continue to sign in</a>
+    <p class="muted" style="text-align:center;margin:10px 0 0">Already installed? This button takes you straight to sign-in.</p>
+  </section>
+
+  <section>
+    <details><summary>Installing does not work on my device</summary>
+      <p class="muted">You can still use OKV School in your browser. Open the sign-in page and bookmark it.</p>
+      <a class="btn ghost" href="index.html">Go to sign-in in the browser</a>
+    </details>
+  </section>
+</main>
+<script src="common.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const forRole = params.get('for') === 'teacher' ? 'teacher' : 'student';
+const LOGIN = 'index.html';
+const $ = id => document.getElementById(id);
+if (forRole === 'teacher') $('intro').textContent = 'Your school administrator has invited you to the OKV School app for teachers.';
+else $('intro').textContent = 'Your teacher has invited you to the OKV School app for students.';
+
+let deferred = null;
+const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+function goToLogin(message) {
+  $('status').textContent = message || 'Opening sign-in…';
+  setTimeout(() => location.replace(LOGIN), 1500);
+}
+
+/* Chrome and Edge offer an install prompt; iPhone and iPad use the Share menu instead. */
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault(); deferred = e;
+  $('install').hidden = false;
+});
+$('install').onclick = async () => {
+  if (!deferred) return;
+  $('install').disabled = true;
+  deferred.prompt();
+  const choice = await deferred.userChoice.catch(() => null);
+  deferred = null;
+  if (choice && choice.outcome === 'accepted') goToLogin('Installed. Opening sign-in…');
+  else { $('install').disabled = false; $('status').textContent = 'Installation was cancelled. You can try again.'; }
+};
+/* Once installed, go on to sign-in */
+window.addEventListener('appinstalled', () => goToLogin('Installed. Opening sign-in…'));
+
+if (standalone) {
+  /* already running as the installed app: go straight on */
+  $('steps').hidden = true; $('install').hidden = true;
+  goToLogin('The app is installed. Opening sign-in…');
+}
+</script>
+</body>
+</html>

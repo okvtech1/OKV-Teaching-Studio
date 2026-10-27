@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teacher · OKV School</title>
+<style>
+:root { --ink:#1b2430; --muted:#5b6675; --line:#d9dee6; --brand:#2456b8; --bad:#b42318; --bg:#f5f7fa; --card:#fff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink:#e8edf4; --muted:#9aa6b6; --line:#2e3744; --brand:#7aa2ff; --bad:#ff8a80; --bg:#12161c; --card:#1a2029; } }
+:root[data-theme="dark"] { --ink:#e8edf4; --muted:#9aa6b6; --line:#2e3744; --brand:#7aa2ff; --bad:#ff8a80; --bg:#12161c; --card:#1a2029; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+header { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--card); }
+header h1 { font-size:18px; margin:0; }
+header nav a { color:var(--brand); margin-right:12px; font-size:14px; }
+main { max-width:960px; margin:0 auto; padding:16px; display:grid; gap:16px; }
+section.card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; min-width:0; }
+h2 { font-size:16px; margin:0 0 12px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; align-items:end; }
+label { display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
+input, select, textarea { width:100%; padding:9px; font-size:15px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--ink); font-family:inherit; }
+textarea { min-height:70px; }
+button { padding:8px 12px; font-size:14px; border:0; border-radius:8px; background:var(--brand); color:#fff; cursor:pointer; }
+button.ghost { background:transparent; color:var(--brand); border:1px solid var(--line); }
+button.tab { background:transparent; color:var(--ink); border:1px solid var(--line); }
+button.tab.on { background:var(--brand); color:#fff; border-color:var(--brand); }
+.tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+.chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+.chip { font-size:13px; padding:3px 9px; border:1px solid var(--line); border-radius:999px; color:var(--muted); }
+table { width:100%; border-collapse:collapse; font-size:14px; }
+th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:middle; }
+.scroll { overflow-x:auto; }
+.muted { color:var(--muted); font-size:13px; }
+.msg { min-height:20px; font-size:14px; color:var(--muted); margin-top:8px; }
+.msg.bad { color:var(--bad); }
+.row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+.hide { display:none !important; }
+.ann { border-top:1px solid var(--line); padding:10px 0; }
+.share { border:1px solid var(--line); border-radius:8px; padding:12px; margin-top:10px; display:grid; gap:6px; }
+.share-row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+.share-url { flex:1; min-width:180px; padding:8px; font-size:13px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--ink); }
+.share a.wa { font-size:14px; color:#128c4a; padding:6px 8px; text-decoration:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>OKV School · Teacher</h1>
+  <nav><a href="tests.html">Tests</a></nav>
+  <button id="signout" class="ghost">Sign out</button>
+</header>
+<main>
+  <section class="card">
+    <div class="grid">
+      <div><label for="cls">My class</label><select id="cls"></select></div>
+      <div><label>Subjects you teach here</label><div class="chips" id="subjChips"></div></div>
+    </div>
+    <div class="msg" id="topMsg"></div>
+  </section>
+
+  <section class="card" id="panel">
+    <div class="tabs">
+      <button class="tab on" data-p="students">Students</button>
+      <button class="tab" data-p="attendance">Attendance</button>
+      <button class="tab" data-p="announce">Announcements</button>
+      <button class="tab" data-p="marks">Marks</button>
+      <button class="tab" data-p="share">Share</button>
+    </div>
+
+    <div id="p-students">
+      <div class="scroll"><table><thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead><tbody id="stuRows"></tbody></table></div>
+      <div class="msg" id="stuMsg"></div>
+    </div>
+
+    <div id="p-attendance" class="hide">
+      <div class="row">
+        <div><label for="attDate">Date</label><input type="date" id="attDate"></div>
+        <button class="ghost" id="attLoad">Load register</button>
+        <button id="attSave">Save register</button>
+      </div>
+      <div class="scroll" style="margin-top:10px"><table><thead><tr><th>Student</th><th>Status</th></tr></thead><tbody id="attRows"></tbody></table></div>
+      <div class="msg" id="attMsg"></div>
+    </div>
+
+    <div id="p-announce" class="hide">
+      <form id="annForm">
+        <label for="annText">New announcement for this class</label>
+        <textarea id="annText" maxlength="2000" required></textarea>
+        <div class="row"><button type="submit">Post</button></div>
+      </form>
+      <div id="annList" style="margin-top:12px"></div>
+      <div class="msg" id="annMsg"></div>
+    </div>
+
+    <div id="p-share" class="hide">
+      <p class="muted">Send this link to your students. It opens the install page, then the sign-in page.</p>
+      <div id="shareBox"></div>
+    </div>
+
+    <div id="p-marks" class="hide">
+      <form id="markForm" class="grid">
+        <div><label for="mSub">Subject</label><select id="mSub" required></select></div>
+        <div><label for="mStu">Student</label><select id="mStu" required></select></div>
+        <div><label for="mAss">Assessment</label><input id="mAss" placeholder="e.g. Test 1" required></div>
+        <div><label for="mTerm">Term</label><input id="mTerm" placeholder="e.g. 1st term"></div>
+        <div><label for="mScore">Score</label><input id="mScore" type="number" step="any" min="0" required></div>
+        <div><label for="mMax">Out of</label><input id="mMax" type="number" step="any" min="1" required></div>
+        <div><label for="mRemark">Remark</label><input id="mRemark"></div>
+        <div><label for="mDate">Date</label><input id="mDate" type="date"></div>
+        <div><button type="submit">Save mark</button></div>
+      </form>
+      <div class="msg" id="markMsg"></div>
+      <div class="scroll" style="margin-top:12px"><table><thead><tr><th>Student</th><th>Assessment</th><th>Term</th><th>Score</th><th>Remark</th><th></th></tr></thead><tbody id="markRows"></tbody></table></div>
+    </div>
+  </section>
+</main>
+<script src="common.js"></script>
+<script>
+const me = Session.require('teacher');
+Ui.signOutButton();
+const $ = id => document.getElementById(id);
+const esc = Ui.esc;
+let classes = [], cur = null, students = [];
+const today = () => new Date().toISOString().slice(0, 10);
+$('attDate').value = today(); $('mDate').value = today();
+
+document.querySelectorAll('button.tab').forEach(b => b.onclick = () => {
+  document.querySelectorAll('button.tab').forEach(x => x.classList.toggle('on', x === b));
+  ['students', 'attendance', 'announce', 'marks', 'share'].forEach(p => $('p-' + p).classList.toggle('hide', p !== b.dataset.p));
+  if (b.dataset.p === 'share') Share.mount($('shareBox'), [{ label: 'For students', role: 'student' }]);
+  if (b.dataset.p === 'announce') loadAnn();
+  if (b.dataset.p === 'marks') loadMarks();
+  if (b.dataset.p === 'attendance') loadAtt();
+});
+$('cls').onchange = () => selectClass($('cls').value);
+
+async function init() {
+  try {
+    classes = (await Api.call('myClasses')).classes;
+    if (!classes.length) { Ui.msg($('topMsg'), 'You are not assigned to any subject yet. Ask the school administrator.'); return; }
+    $('cls').innerHTML = classes.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+    selectClass(classes[0].id);
+  } catch (e) { Ui.msg($('topMsg'), e.message, true); }
+}
+function selectClass(id) {
+  cur = classes.find(c => c.id === id); if (!cur) return;
+  $('cls').value = id;
+  $('subjChips').innerHTML = cur.subjects.map(s => `<span class="chip">${esc(s.name)}</span>`).join('') || '<span class="muted">None</span>';
+  students = cur.students;
+  $('mSub').innerHTML = cur.subjects.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+  $('mStu').innerHTML = students.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+  renderStudents(); loadAtt(); loadAnn(); loadMarks();
+}
+
+function renderStudents() {
+  const tb = $('stuRows'), msg = $('stuMsg');
+  tb.innerHTML = students.length ? '' : '<tr><td colspan="4" class="muted">No students in this class yet.</td></tr>';
+  students.forEach(s => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${esc(s.name)}</td><td class="muted"></td><td>${s.active ? 'Active' : 'Switched off'}</td>
+      <td><a href="live.html?student=${esc(s.id)}">Live board</a> <button class="ghost pw">Reset password</button> <button class="ghost tg">${s.active ? 'Switch off' : 'Switch on'}</button></td>`;
+    tr.children[1].textContent = s.email || '';
+    tr.querySelector('.pw').onclick = async () => {
+      const pw = prompt('New password for ' + s.name + ' (6+ characters):'); if (!pw) return;
+      try { await Api.call('setPassword', { userId: s.id, password: pw }); Ui.msg(msg, 'Password changed for ' + s.name + '.'); }
+      catch (e) { Ui.msg(msg, e.message, true); }
+    };
+    tr.querySelector('.tg').onclick = async () => {
+      try { await Api.call('setActive', { userId: s.id, active: !s.active }); s.active = !s.active; renderStudents(); }
+      catch (e) { Ui.msg(msg, e.message, true); }
+    };
+    tb.appendChild(tr);
+  });
+}
+
+/* attendance register */
+async function loadAtt() {
+  if (!cur) return;
+  const msg = $('attMsg');
+  try {
+    const { attendance } = await Api.call('listAttendance', { classId: cur.id, date: $('attDate').value });
+    const status = {}; attendance.forEach(a => status[a.studentId] = a.status);
+    $('attRows').innerHTML = students.length ? '' : '<tr><td colspan="2" class="muted">No students.</td></tr>';
+    students.forEach(s => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${esc(s.name)}</td><td><select data-id="${esc(s.id)}">
+        <option value="present">Present</option><option value="late">Late</option><option value="absent">Absent</option></select></td>`;
+      tr.querySelector('select').value = status[s.id] || 'present';
+      $('attRows').appendChild(tr);
+    });
+    Ui.msg(msg, attendance.length ? '' : 'No register yet for this date. Everyone starts as present.');
+  } catch (e) { Ui.msg(msg, e.message, true); }
+}
+$('attLoad').onclick = loadAtt;
+$('attDate').onchange = loadAtt;
+$('attSave').onclick = async () => {
+  const msg = $('attMsg');
+  const records = [...$('attRows').querySelectorAll('select[data-id]')].map(s => ({ studentId: s.dataset.id, status: s.value }));
+  try { const r = await Api.call('saveAttendance', { classId: cur.id, date: $('attDate').value, records }); Ui.msg(msg, `Register saved for ${r.saved} students.`); }
+  catch (e) { Ui.msg(msg, e.message, true); }
+};
+
+/* announcements */
+async function loadAnn() {
+  if (!cur) return;
+  const box = $('annList');
+  try {
+    const { announcements } = await Api.call('listAnnouncements', { classId: cur.id });
+    box.innerHTML = announcements.length ? '' : '<p class="muted">No announcements yet.</p>';
+    announcements.forEach(a => {
+      const d = document.createElement('div'); d.className = 'ann';
+      d.innerHTML = `<div>${esc(a.text)}</div><div class="muted">${new Date(a.createdAt).toLocaleString()} · ${esc(a.authorName)}</div>${a.mine ? '<button class="ghost del">Delete</button>' : ''}`;
+      const del = d.querySelector('.del');
+      if (del) del.onclick = async () => { if (!confirm('Delete this announcement?')) return; try { await Api.call('deleteAnnouncement', { id: a.id }); loadAnn(); } catch (e) { Ui.msg($('annMsg'), e.message, true); } };
+      box.appendChild(d);
+    });
+  } catch (e) { Ui.msg($('annMsg'), e.message, true); }
+}
+$('annForm').addEventListener('submit', async (e) => {
+  e.preventDefault(); const msg = $('annMsg');
+  try { await Api.call('postAnnouncement', { classId: cur.id, text: $('annText').value }); $('annText').value = ''; Ui.msg(msg, 'Posted.'); loadAnn(); }
+  catch (err) { Ui.msg(msg, err.message, true); }
+});
+
+/* marks */
+async function loadMarks() {
+  if (!cur) return;
+  const tb = $('markRows'), msg = $('markMsg');
+  try {
+    const sub = $('mSub').value;
+    const { marks } = await Api.call('listMarks');
+    const list = marks.filter(m => m.subjectId === sub && students.some(s => s.id === m.studentId));
+    tb.innerHTML = list.length ? '' : '<tr><td colspan="6" class="muted">No marks for this subject yet.</td></tr>';
+    list.forEach(m => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${esc(m.studentName)}</td><td>${esc(m.assessment)}</td><td>${esc(m.term)}</td>
+        <td>${m.score} / ${m.max} <span class="muted">(${Math.round(m.score / m.max * 100)}%)</span></td><td>${esc(m.remark)}</td>
+        <td>${m.mine ? '<button class="ghost del">Delete</button>' : ''}</td>`;
+      const del = tr.querySelector('.del');
+      if (del) del.onclick = async () => { if (!confirm('Delete this mark?')) return; try { await Api.call('deleteMark', { id: m.id }); loadMarks(); } catch (e) { Ui.msg(msg, e.message, true); } };
+      tb.appendChild(tr);
+    });
+  } catch (e) { Ui.msg(msg, e.message, true); }
+}
+$('mSub').onchange = loadMarks;
+$('markForm').addEventListener('submit', async (e) => {
+  e.preventDefault(); const msg = $('markMsg');
+  try {
+    await Api.call('saveMark', { mark: { studentId: $('mStu').value, subjectId: $('mSub').value, assessment: $('mAss').value, term: $('mTerm').value,
+      score: $('mScore').value, max: $('mMax').value, remark: $('mRemark').value, date: $('mDate').value } });
+    Ui.msg(msg, 'Mark saved.'); $('mScore').value = ''; $('mRemark').value = ''; loadMarks();
+  } catch (err) { Ui.msg(msg, err.message, true); }
+});
+
+init();
+</script>
+</body>
+</html>

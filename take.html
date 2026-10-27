@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tests · OKV School</title>
+<style>
+:root { --ink:#1b2430; --muted:#5b6675; --line:#d9dee6; --brand:#2456b8; --bad:#b42318; --bg:#f5f7fa; --card:#fff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink:#e8edf4; --muted:#9aa6b6; --line:#2e3744; --brand:#7aa2ff; --bad:#ff8a80; --bg:#12161c; --card:#1a2029; } }
+:root[data-theme="dark"] { --ink:#e8edf4; --muted:#9aa6b6; --line:#2e3744; --brand:#7aa2ff; --bad:#ff8a80; --bg:#12161c; --card:#1a2029; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+header { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--card); }
+header h1 { font-size:18px; margin:0; }
+main { max-width:700px; margin:0 auto; padding:16px; display:grid; gap:16px; }
+section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; min-width:0; }
+h2 { font-size:16px; margin:0 0 12px; }
+button { padding:10px 16px; font-size:15px; border:0; border-radius:8px; background:var(--brand); color:#fff; cursor:pointer; }
+button.ghost { background:transparent; color:var(--brand); border:1px solid var(--line); }
+button:disabled { opacity:.5; }
+.q { border-top:1px solid var(--line); padding:12px 0; }
+.q p { margin:0 0 8px; font-weight:600; }
+label.opt { display:block; padding:6px 0; }
+input[type=text] { width:100%; padding:9px; font-size:15px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--ink); }
+.row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.muted { color:var(--muted); font-size:14px; }
+.msg { min-height:20px; font-size:14px; color:var(--muted); }
+.msg.bad { color:var(--bad); }
+.big { font-size:28px; font-weight:700; }
+</style>
+</head>
+<body>
+<header>
+  <h1>OKV Teaching Studio · Tests</h1>
+  <button id="signout" class="ghost">Sign out</button>
+</header>
+<main>
+  <section id="list"><h2>My tests</h2><div id="tests"></div><div id="msg" class="msg"></div></section>
+  <section id="taking" hidden></section>
+</main>
+<script src="common.js"></script>
+<script>
+const me = Session.require('student');
+Ui.signOutButton();
+const list = document.getElementById('tests'), msg = document.getElementById('msg'), taking = document.getElementById('taking');
+
+async function loadList() {
+  try {
+    const [{ tests }, { attempts }] = await Promise.all([Api.call('listTests'), Api.call('listAttempts')]);
+    const done = new Map(attempts.map(a => [a.testId, a]));
+    list.innerHTML = tests.length ? '' : '<p class="muted">No tests yet.</p>';
+    tests.forEach(t => {
+      const d = document.createElement('div'); d.className = 'row'; d.style.justifyContent = 'space-between'; d.style.padding = '8px 0';
+      const a = done.get(t.id);
+      d.innerHTML = `<span>${Ui.esc(t.title)} <span class="muted">${t.questions.length} questions</span></span>`;
+      const b = document.createElement('button');
+      if (a) { b.textContent = 'Done: ' + a.score + ' / ' + a.max; b.disabled = true; b.className = 'ghost'; }
+      else { b.textContent = 'Start'; b.onclick = () => startTest(t); }
+      d.appendChild(b); list.appendChild(d);
+    });
+  } catch (e) { Ui.msg(msg, e.message, true); }
+}
+
+function startTest(t) {
+  list.parentElement.hidden = true; taking.hidden = false;
+  taking.innerHTML = `<h2>${Ui.esc(t.title)}</h2><form id="f"></form><div id="tm" class="msg"></div>`;
+  const f = taking.querySelector('#f');
+  t.questions.forEach((q, i) => {
+    const d = document.createElement('div'); d.className = 'q';
+    d.innerHTML = `<p>${i + 1}. ${Ui.esc(q.text)} <span class="muted">(${Number(q.points) || 1} pt)</span></p>`;
+    if (q.type === 'mcq') d.insertAdjacentHTML('beforeend', q.options.map((o, j) =>
+      `<label class="opt"><input type="radio" name="q${i}" value="${j}"> ${Ui.esc(o)}</label>`).join(''));
+    else if (q.type === 'tf') d.insertAdjacentHTML('beforeend', ['true', 'false'].map(v =>
+      `<label class="opt"><input type="radio" name="q${i}" value="${v}"> ${v === 'true' ? 'True' : 'False'}</label>`).join(''));
+    else d.insertAdjacentHTML('beforeend', `<input type="text" name="q${i}" autocomplete="off">`);
+    f.appendChild(d);
+  });
+  f.insertAdjacentHTML('beforeend', `<div class="row"><button type="submit">Submit test</button></div>`);
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!confirm('Submit now? You cannot change your answers after this.')) return;
+    const answers = t.questions.map((q, i) => {
+      if (q.type === 'short') return f.elements['q' + i].value;
+      const el = [...f.querySelectorAll(`input[name=q${i}]`)].find(r => r.checked);
+      if (!el) return '';
+      return q.type === 'mcq' ? Number(el.value) : el.value;
+    });
+    const tm = taking.querySelector('#tm');
+    try {
+      const r = await Api.call('submitAttempt', { testId: t.id, answers });
+      taking.innerHTML = `<h2>${Ui.esc(t.title)}</h2><p class="muted">Your score</p><p class="big">${r.score} / ${r.max}</p>
+        <p class="muted">Essay questions, if any, are marked by your teacher and added to your results.</p>
+        <button class="ghost" id="back">Back to my tests</button>`;
+      taking.querySelector('#back').onclick = () => location.reload();
+    } catch (err) { Ui.msg(tm, err.message, true); }
+  });
+}
+loadList();
+</script>
+</body>
+</html>

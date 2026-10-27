@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tests · OKV School</title>
+<style>
+:root { --ink:#1b2430; --muted:#5b6675; --line:#d9dee6; --brand:#2456b8; --bad:#b42318; --bg:#f5f7fa; --card:#fff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink:#e8edf4; --muted:#9aa6b6; --line:#2e3744; --brand:#7aa2ff; --bad:#ff8a80; --bg:#12161c; --card:#1a2029; } }
+:root[data-theme="dark"] { --ink:#e8edf4; --muted:#9aa6b6; --line:#2e3744; --brand:#7aa2ff; --bad:#ff8a80; --bg:#12161c; --card:#1a2029; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+header { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--card); }
+header h1 { font-size:18px; margin:0; }
+nav a { color:var(--brand); margin-right:12px; font-size:14px; }
+main { max-width:900px; margin:0 auto; padding:16px; display:grid; gap:16px; }
+section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; min-width:0; }
+h2 { font-size:16px; margin:0 0 12px; }
+label { display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
+input, select { width:100%; padding:9px; font-size:15px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--ink); }
+button { padding:9px 14px; font-size:15px; border:0; border-radius:8px; background:var(--brand); color:#fff; cursor:pointer; }
+button.ghost { background:transparent; color:var(--brand); border:1px solid var(--line); }
+.q { border:1px solid var(--line); border-radius:8px; padding:12px; margin-top:10px; display:grid; gap:8px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+.row { display:flex; gap:8px; flex-wrap:wrap; align-items:end; margin-top:10px; }
+table { width:100%; border-collapse:collapse; font-size:14px; }
+th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); }
+.muted { color:var(--muted); font-size:13px; }
+.msg { min-height:20px; font-size:14px; color:var(--muted); margin-top:8px; }
+.msg.bad { color:var(--bad); }
+.scroll { overflow-x:auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>OKV Teaching Studio · Tests</h1>
+  <nav><a href="teacher.html">Students &amp; marks</a><a href="tests.html">Tests</a></nav>
+  <button id="signout" class="ghost">Sign out</button>
+</header>
+<main>
+  <section>
+    <h2 id="formTitle">New test</h2>
+    <form id="testForm">
+      <input type="hidden" id="tid">
+      <div><label for="ttitle">Test title</label><input id="ttitle" required></div>
+      <div><label for="tsub">Subject</label><select id="tsub" required></select></div>
+      <div id="qs"></div>
+      <div class="row">
+        <button type="button" class="ghost" id="addQ">+ Add question</button>
+        <button type="submit">Save test</button>
+        <button type="button" class="ghost" id="reset">New test</button>
+      </div>
+      <div id="formMsg" class="msg"></div>
+    </form>
+  </section>
+
+  <section>
+    <h2>My tests</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Title</th><th>Questions</th><th>Results</th><th></th></tr></thead>
+      <tbody id="tests"></tbody>
+    </table></div>
+    <div id="listMsg" class="msg"></div>
+  </section>
+
+  <section>
+    <h2 id="resTitle">Results</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Student</th><th>Score</th><th>Percent</th><th>Submitted</th></tr></thead>
+      <tbody id="results"><tr><td colspan="4" class="muted">Choose a test to see results.</td></tr></tbody>
+    </table></div>
+    <div class="row"><button class="ghost" id="csv" disabled>Download results (CSV)</button></div>
+  </section>
+</main>
+<script src="common.js"></script>
+<script>
+const me = Session.require('teacher');
+Ui.signOutButton();
+let tests = [], students = [], currentResults = [], currentTitle = '';
+const TYPES = { mcq: 'Multiple choice', tf: 'True / false', short: 'Short answer', essay: 'Essay (teacher marks)' };
+
+function qRow(q = { type: 'mcq', options: ['', ''], points: 1 }) {
+  const d = document.createElement('div'); d.className = 'q';
+  d.innerHTML = `
+    <div class="grid">
+      <div><label>Type</label><select class="t">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+      <div><label>Points</label><input class="p" type="number" min="0" step="any"></div>
+    </div>
+    <div><label>Question</label><input class="x"></div>
+    <div class="opts"></div>`;
+  d.querySelector('.t').value = q.type; d.querySelector('.p').value = q.points ?? 1; d.querySelector('.x').value = q.text || '';
+  d.dataset.opts = JSON.stringify(q.options || ['', '']);
+  d.dataset.correct = q.correct ?? '';
+  d.dataset.answer = q.answer || '';
+  const paint = () => {
+    const t = d.querySelector('.t').value, o = d.querySelector('.opts');
+    if (t === 'mcq') {
+      const opts = JSON.parse(d.dataset.opts);
+      o.innerHTML = opts.map((v, i) => `<div class="row"><input class="ov" data-i="${i}" placeholder="Option ${i + 1}" value="${Ui.esc(v)}" style="flex:1"><label><input type="radio" name="c${d.id || Math.random()}" value="${i}" ${String(d.dataset.correct) === String(i) ? 'checked' : ''} style="width:auto"> correct</label></div>`).join('')
+        + `<button type="button" class="ghost addo">+ option</button>`;
+      o.querySelectorAll('.ov').forEach(inp => inp.oninput = () => { const a = JSON.parse(d.dataset.opts); a[inp.dataset.i] = inp.value; d.dataset.opts = JSON.stringify(a); });
+      o.querySelectorAll('input[type=radio]').forEach(r => r.onchange = () => d.dataset.correct = r.value);
+      o.querySelector('.addo').onclick = () => { const a = JSON.parse(d.dataset.opts); a.push(''); d.dataset.opts = JSON.stringify(a); paint(); };
+    } else if (t === 'tf') {
+      o.innerHTML = `<label>Correct answer</label><select class="tfc"><option value="true">True</option><option value="false">False</option></select>`;
+      const s = o.querySelector('.tfc'); s.value = d.dataset.correct || 'true'; s.onchange = () => d.dataset.correct = s.value; d.dataset.correct = s.value;
+    } else if (t === 'short') {
+      o.innerHTML = `<label>Accepted answer (not case-sensitive)</label><input class="sa" value="${Ui.esc(d.dataset.answer)}">`;
+      o.querySelector('.sa').oninput = e => d.dataset.answer = e.target.value;
+    } else { o.innerHTML = `<p class="muted" style="margin:0">Students write an answer. You mark it in the gradebook.</p>`; }
+  };
+  d.querySelector('.t').onchange = () => { d.dataset.correct = ''; paint(); };
+  d.querySelector('.p').oninput = e => d.dataset.points = e.target.value;
+  d.dataset.points = q.points ?? 1;
+  d.querySelector('.p').oninput = e => d.dataset.points = e.target.value;
+  paint();
+  d._paint = paint;
+  return d;
+}
+function addQ(q) { document.getElementById('qs').appendChild(qRow(q)); }
+function readForm() {
+  const qs = [...document.querySelectorAll('#qs .q')].map(d => {
+    const t = d.querySelector('.t').value, q = { type: t, text: d.querySelector('.x').value.trim(), points: Number(d.querySelector('.p').value) || 1 };
+    if (t === 'mcq') { q.options = JSON.parse(d.dataset.opts).map(s => String(s).trim()); q.correct = Number(d.dataset.correct); }
+    if (t === 'tf') q.correct = d.dataset.correct || 'true';
+    if (t === 'short') q.answer = d.dataset.answer.trim();
+    return q;
+  });
+  return { title: document.getElementById('ttitle').value.trim(), subjectId: document.getElementById('tsub').value, questions: qs, id: document.getElementById('tid').value || undefined };
+}
+function resetForm() {
+  document.getElementById('tid').value = ''; document.getElementById('ttitle').value = '';
+  document.getElementById('qs').innerHTML = ''; document.getElementById('formTitle').textContent = 'New test';
+  addQ(); Ui.msg(document.getElementById('formMsg'), '');
+}
+function editTest(t) {
+  document.getElementById('tid').value = t.id; document.getElementById('ttitle').value = t.title; document.getElementById('tsub').value = t.subjectId;
+  document.getElementById('qs').innerHTML = ''; document.getElementById('formTitle').textContent = 'Edit: ' + t.title;
+  t.questions.forEach(q => addQ(q));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+document.getElementById('addQ').onclick = () => addQ();
+document.getElementById('reset').onclick = resetForm;
+
+document.getElementById('testForm').addEventListener('submit', async (e) => {
+  e.preventDefault(); const msg = document.getElementById('formMsg');
+  try {
+    const r = await Api.call('saveTest', { test: readForm() });
+    Ui.msg(msg, 'Saved.'); await loadTests(); resetForm(); Ui.msg(msg, 'Test saved.');
+  } catch (err) { Ui.msg(msg, err.message, true); }
+});
+
+async function loadTests() {
+  const msg = document.getElementById('listMsg');
+  try {
+    tests = (await Api.call('listTests')).tests;
+    const tb = document.getElementById('tests');
+    tb.innerHTML = tests.length ? '' : '<tr><td colspan="4" class="muted">No tests yet.</td></tr>';
+    tests.forEach(t => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${Ui.esc(t.title)} <span class="muted">${Ui.esc(t.subjectName || '')}</span></td><td>${t.questions.length}</td><td><button class="ghost res">View</button></td><td><button class="ghost edit">Edit</button></td>`;
+      tr.querySelector('.res').onclick = () => showResults(t);
+      tr.querySelector('.edit').onclick = () => editTest(t);
+      tb.appendChild(tr);
+    });
+    const s = await Api.call('listStudents'); students = s.students;
+    Ui.msg(msg, '');
+  } catch (e) { Ui.msg(msg, e.message, true); }
+}
+async function showResults(t) {
+  currentTitle = t.title;
+  document.getElementById('resTitle').textContent = 'Results: ' + t.title;
+  const tb = document.getElementById('results');
+  try {
+    const { attempts } = await Api.call('listAttempts', { testId: t.id });
+    currentResults = attempts.map(a => {
+      const s = { name: a.studentName || '(unknown student)' };
+      return { name: s.name, score: a.score, max: a.max, pct: a.max ? Math.round(a.score / a.max * 100) : 0, at: new Date(a.submittedAt).toLocaleString() };
+    });
+    tb.innerHTML = currentResults.length ? '' : '<tr><td colspan="4" class="muted">Nobody has taken this test yet.</td></tr>';
+    currentResults.forEach(r => { const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${Ui.esc(r.name)}</td><td>${r.score} / ${r.max}</td><td>${r.pct}%</td><td>${Ui.esc(r.at)}</td>`; tb.appendChild(tr); });
+    document.getElementById('csv').disabled = !currentResults.length;
+  } catch (e) { tb.innerHTML = `<tr><td colspan="4" class="msg bad">${Ui.esc(e.message)}</td></tr>`; }
+}
+document.getElementById('csv').onclick = () => {
+  const rows = [['Student', 'Score', 'Out of', 'Percent', 'Submitted']].concat(currentResults.map(r => [r.name, r.score, r.max, r.pct + '%', r.at]));
+  Csv.download(currentTitle.replace(/\W+/g, '_') + '_results.csv', rows);
+};
+
+async function loadSubjectChoices() {
+  const { subjects } = await Api.call('listSubjects');
+  document.getElementById('tsub').innerHTML = subjects.map(s => `<option value="${Ui.esc(s.id)}">${Ui.esc(s.name)} (${Ui.esc(s.className)})</option>`).join('');
+}
+(async () => { try { await loadSubjectChoices(); } catch (e) { Ui.msg(document.getElementById('listMsg'), e.message, true); } resetForm(); await loadTests(); })();
+</script>
+</body>
+</html>

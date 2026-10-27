@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin · OKV School</title>
+<style>
+:root { --ink:#1b2430; --muted:#5b6675; --line:#d9dee6; --brand:#2456b8; --bad:#b42318; --bg:#f5f7fa; --card:#fff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink:#e8edf4; --muted:#9aa6b6; --line:#2e3744; --brand:#7aa2ff; --bad:#ff8a80; --bg:#12161c; --card:#1a2029; } }
+:root[data-theme="dark"] { --ink:#e8edf4; --muted:#9aa6b6; --line:#2e3744; --brand:#7aa2ff; --bad:#ff8a80; --bg:#12161c; --card:#1a2029; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+header { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--card); }
+header h1 { font-size:18px; margin:0; }
+nav.tabs { display:flex; gap:6px; flex-wrap:wrap; padding:10px 16px 0; max-width:960px; margin:0 auto; }
+nav.tabs button { background:transparent; color:var(--ink); border:1px solid var(--line); }
+nav.tabs button.on { background:var(--brand); color:#fff; border-color:var(--brand); }
+main { max-width:960px; margin:0 auto; padding:16px; display:grid; gap:16px; }
+section.card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; min-width:0; }
+h2 { font-size:16px; margin:0 0 12px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; align-items:end; }
+label { display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
+input, select { width:100%; padding:9px; font-size:15px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--ink); }
+button { padding:8px 12px; font-size:14px; border:0; border-radius:8px; background:var(--brand); color:#fff; cursor:pointer; }
+button.ghost { background:transparent; color:var(--brand); border:1px solid var(--line); }
+table { width:100%; border-collapse:collapse; font-size:14px; }
+th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:middle; }
+.scroll { overflow-x:auto; }
+.muted { color:var(--muted); font-size:13px; }
+.msg { min-height:20px; font-size:14px; color:var(--muted); margin-top:8px; }
+.msg.bad { color:var(--bad); }
+.stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; }
+.stat { border:1px solid var(--line); border-radius:8px; padding:12px; }
+.stat b { font-size:24px; display:block; }
+.hide { display:none !important; }
+.share { border:1px solid var(--line); border-radius:8px; padding:12px; margin-top:10px; display:grid; gap:6px; }
+.share-row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+.share-url { flex:1; min-width:180px; padding:8px; font-size:13px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--ink); }
+.share a.wa { font-size:14px; color:#128c4a; padding:6px 8px; text-decoration:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>OKV School · Administrator</h1>
+  <nav><a href="teacher.html">Teaching (all classes)</a><a href="tests.html">Tests</a></nav>
+  <button id="signout" class="ghost">Sign out</button>
+</header>
+<nav class="tabs" id="tabs">
+  <button data-tab="overview" class="on">Overview</button>
+  <button data-tab="teachers">Teachers</button>
+  <button data-tab="classes">Classes</button>
+  <button data-tab="subjects">Subjects</button>
+  <button data-tab="students">Students</button>
+  <button data-tab="share">Share</button>
+</nav>
+<main>
+  <section class="card" id="tab-overview">
+    <h2>Overview</h2>
+    <div class="stats" id="stats"></div>
+    <p class="muted">Create teachers, classes and subjects first, then add students to a class. Each teacher sees only the classes they teach.</p>
+    <div class="msg" id="ovMsg"></div>
+  </section>
+
+  <section class="card hide" id="tab-teachers">
+    <h2>Add a teacher</h2>
+    <form id="fTeacher" class="grid">
+      <div><label for="tn">Full name</label><input id="tn" required></div>
+      <div><label for="te">Email</label><input id="te" type="email" required></div>
+      <div><label for="tp">Password (6+)</label><input id="tp" minlength="6" required></div>
+      <div><button type="submit">Create teacher</button></div>
+    </form>
+    <div class="msg" id="tMsg"></div>
+    <h2 style="margin-top:16px">Teachers</h2>
+    <div class="scroll"><table><thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead><tbody id="teachers"></tbody></table></div>
+  </section>
+
+  <section class="card hide" id="tab-classes">
+    <h2>Add a class</h2>
+    <form id="fClass" class="grid">
+      <div><label for="cn">Class name</label><input id="cn" placeholder="e.g. JSS1 A" required></div>
+      <div><button type="submit">Create class</button></div>
+    </form>
+    <div class="msg" id="cMsg"></div>
+    <h2 style="margin-top:16px">Classes</h2>
+    <div class="scroll"><table><thead><tr><th>Class</th><th>Subjects</th><th>Students</th></tr></thead><tbody id="classes"></tbody></table></div>
+  </section>
+
+  <section class="card hide" id="tab-subjects">
+    <h2>Add a subject</h2>
+    <form id="fSubject" class="grid">
+      <div><label for="sn2">Subject</label><input id="sn2" placeholder="e.g. Mathematics" required></div>
+      <div><label for="sc">Class</label><select id="sc" required></select></div>
+      <div><label for="st">Teacher</label><select id="st"></select></div>
+      <div><button type="submit">Create subject</button></div>
+    </form>
+    <div class="msg" id="sMsg"></div>
+    <h2 style="margin-top:16px">Subjects</h2>
+    <div class="scroll"><table><thead><tr><th>Subject</th><th>Class</th><th>Teacher</th></tr></thead><tbody id="subjects"></tbody></table></div>
+  </section>
+
+  <section class="card hide" id="tab-share">
+    <h2>Share the app</h2>
+    <p class="muted">Send these links. Each opens the install page, then the sign-in page. Teachers and students sign in with the accounts you created.</p>
+    <div id="shareBox"></div>
+  </section>
+
+  <section class="card hide" id="tab-students">
+    <h2>Add a student</h2>
+    <form id="fStudent" class="grid">
+      <div><label for="sn3">Full name</label><input id="sn3" required></div>
+      <div><label for="se3">Email</label><input id="se3" type="email" required></div>
+      <div><label for="sp3">Password (6+)</label><input id="sp3" minlength="6" required></div>
+      <div><label for="scl">Class</label><select id="scl" required></select></div>
+      <div><button type="submit">Create student</button></div>
+    </form>
+    <div class="msg" id="stMsg"></div>
+    <h2 style="margin-top:16px">Students</h2>
+    <div class="scroll"><table><thead><tr><th>Name</th><th>Email</th><th>Class</th><th>Status</th><th>Actions</th></tr></thead><tbody id="students"></tbody></table></div>
+  </section>
+</main>
+<script src="common.js"></script>
+<script>
+const me = Session.require('admin');
+Ui.signOutButton();
+let classes = [], teachers = [];
+const $ = id => document.getElementById(id);
+const esc = Ui.esc;
+const opts = (list, val, none) => (none ? `<option value="">${esc(none)}</option>` : '') + list.map(x => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
+
+document.getElementById('tabs').addEventListener('click', e => {
+  const b = e.target.closest('button[data-tab]'); if (!b) return;
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('main > section').forEach(s => s.classList.toggle('hide', s.id !== 'tab-' + b.dataset.tab));
+  load(b.dataset.tab);
+});
+
+async function refreshLists() {
+  classes = (await Api.call('listClasses')).classes;
+  teachers = (await Api.call('listUsers', { role: 'teacher' })).users;
+  $('scl').innerHTML = opts(classes);
+  $('sc').innerHTML = opts(classes);
+  $('st').innerHTML = opts(teachers, null, 'No teacher yet');
+}
+
+async function loadOverview() {
+  try {
+    const { counts } = await Api.call('adminOverview');
+    $('stats').innerHTML = [['Teachers', counts.teachers], ['Students', counts.students], ['Classes', counts.classes], ['Subjects', counts.subjects], ['Switched off', counts.switchedOff]]
+      .map(([k, v]) => `<div class="stat"><span class="muted">${k}</span><b>${v}</b></div>`).join('');
+  } catch (e) { Ui.msg($('ovMsg'), e.message, true); }
+}
+
+async function loadTeachers() {
+  const tb = $('teachers'), msg = $('tMsg');
+  try {
+    teachers = (await Api.call('listUsers', { role: 'teacher' })).users;
+    tb.innerHTML = teachers.length ? '' : '<tr><td colspan="4" class="muted">No teachers yet.</td></tr>';
+    teachers.forEach(t => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${esc(t.name)}</td><td>${esc(t.email)}</td><td>${t.active ? 'Active' : 'Switched off'}</td>
+        <td><button class="ghost pw">Reset password</button> <button class="ghost tg">${t.active ? 'Switch off' : 'Switch on'}</button></td>`;
+      tr.querySelector('.tg').onclick = () => toggle(t, msg, loadTeachers);
+      tr.querySelector('.pw').onclick = () => resetPw(t, msg);
+      tb.appendChild(tr);
+    });
+  } catch (e) { Ui.msg(msg, e.message, true); }
+}
+async function loadClasses() {
+  const tb = $('classes');
+  try {
+    const [{ classes: cl }, { subjects }, { users }] = await Promise.all([Api.call('listClasses'), Api.call('listSubjects'), Api.call('listUsers', { role: 'student' })]);
+    classes = cl;
+    tb.innerHTML = cl.length ? '' : '<tr><td colspan="3" class="muted">No classes yet.</td></tr>';
+    cl.forEach(c => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${esc(c.name)}</td><td>${subjects.filter(s => s.classId === c.id).length}</td><td>${users.filter(u => u.classId === c.id).length}</td>`;
+      tb.appendChild(tr);
+    });
+  } catch (e) { Ui.msg($('cMsg'), e.message, true); }
+}
+async function loadSubjects() {
+  const tb = $('subjects'), msg = $('sMsg');
+  try {
+    await refreshLists();
+    const { subjects } = await Api.call('listSubjects');
+    tb.innerHTML = subjects.length ? '' : '<tr><td colspan="3" class="muted">No subjects yet.</td></tr>';
+    subjects.forEach(s => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${esc(s.name)}</td><td>${esc(s.className)}</td><td><select class="rt">${opts(teachers, null, 'No teacher')}</select></td>`;
+      const sel = tr.querySelector('.rt'); sel.value = s.teacherId || '';
+      sel.onchange = async () => {
+        try { await Api.call('updateSubject', { id: s.id, teacherId: sel.value }); Ui.msg(msg, 'Teacher updated for ' + s.name + '.'); }
+        catch (e) { Ui.msg(msg, e.message, true); }
+      };
+      tb.appendChild(tr);
+    });
+  } catch (e) { Ui.msg(msg, e.message, true); }
+}
+async function loadStudents() {
+  const tb = $('students'), msg = $('stMsg');
+  try {
+    await refreshLists();
+    const { users } = await Api.call('listUsers', { role: 'student' });
+    tb.innerHTML = users.length ? '' : '<tr><td colspan="5" class="muted">No students yet.</td></tr>';
+    users.forEach(u => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${esc(u.name)}</td><td>${esc(u.email)}</td><td><select class="mv">${opts(classes)}</select></td>
+        <td>${u.active ? 'Active' : 'Switched off'}</td>
+        <td><button class="ghost pw">Reset password</button> <button class="ghost tg">${u.active ? 'Switch off' : 'Switch on'}</button></td>`;
+      tr.querySelector('.mv').value = u.classId || '';
+      tr.querySelector('.mv').onchange = async (e) => {
+        try { await Api.call('moveStudent', { studentId: u.id, classId: e.target.value }); Ui.msg(msg, u.name + ' moved.'); }
+        catch (err) { Ui.msg(msg, err.message, true); }
+      };
+      tr.querySelector('.tg').onclick = () => toggle(u, msg, loadStudents);
+      tr.querySelector('.pw').onclick = () => resetPw(u, msg);
+      tb.appendChild(tr);
+    });
+  } catch (e) { Ui.msg(msg, e.message, true); }
+}
+async function toggle(u, msg, reload) {
+  try { await Api.call('setActive', { userId: u.id, active: !u.active }); reload(); }
+  catch (e) { Ui.msg(msg, e.message, true); }
+}
+async function resetPw(u, msg) {
+  const pw = prompt('New password for ' + u.name + ' (6+ characters):'); if (!pw) return;
+  try { await Api.call('setPassword', { userId: u.id, password: pw }); Ui.msg(msg, 'Password changed for ' + u.name + '.'); }
+  catch (e) { Ui.msg(msg, e.message, true); }
+}
+function bindForm(id, msgId, action, fields, after) {
+  $(id).addEventListener('submit', async (e) => {
+    e.preventDefault(); const msg = $(msgId);
+    try {
+      const data = {}; fields.forEach(([k, el]) => data[k] = $(el).value);
+      await Api.call(action, data);
+      Ui.msg(msg, 'Saved.'); e.target.reset(); after();
+    } catch (err) { Ui.msg(msg, err.message, true); }
+  });
+}
+bindForm('fTeacher', 'tMsg', 'createTeacher', [['name', 'tn'], ['email', 'te'], ['password', 'tp']], loadTeachers);
+bindForm('fClass', 'cMsg', 'createClass', [['name', 'cn']], async () => { await loadClasses(); await refreshLists(); });
+bindForm('fSubject', 'sMsg', 'createSubject', [['name', 'sn2'], ['classId', 'sc'], ['teacherId', 'st']], loadSubjects);
+bindForm('fStudent', 'stMsg', 'createStudent', [['name', 'sn3'], ['email', 'se3'], ['password', 'sp3'], ['classId', 'scl']], loadStudents);
+
+async function load(tab) {
+  if (tab === 'overview') return loadOverview();
+  if (tab === 'teachers') return loadTeachers();
+  if (tab === 'classes') return loadClasses();
+  if (tab === 'subjects') return loadSubjects();
+  if (tab === 'students') return loadStudents();
+  if (tab === 'share') return Share.mount($('shareBox'), [{ label: 'For teachers', role: 'teacher' }, { label: 'For students', role: 'student' }]);
+}
+refreshLists().catch(() => {});
+loadOverview();
+</script>
+</body>
+</html>
