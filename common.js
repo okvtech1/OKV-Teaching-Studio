@@ -1,6 +1,6 @@
 /* OKV Teaching Studio — shared client code. Host these files anywhere static (GitHub Pages, Netlify, your own server).
    Paste the /exec URL from the Apps Script deployment into API_URL below. */
-const API_URL = 'PASTE_APPS_SCRIPT_EXEC_URL_HERE';
+const API_URL = 'https://script.google.com/macros/s/AKfycbz841fzNbhLyGHC1kB911r0sxaA_YPlwnxHtIh7panChBFERaNC3ofSA0twhE2rJdyjIA/exec';
 
 const Api = {
   /* POST with text/plain avoids a CORS preflight, which Apps Script cannot answer. */
